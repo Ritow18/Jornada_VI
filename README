@@ -1,0 +1,14 @@
+primeira versão do aplicativo, explicativa do que contém:
+
+
+(banco_rigging.sqlite) banco sqlite, motivo pois já é integrado com o python, e suas classes já criadas
+
+(TLogin e TPrincipal) tela de login provisória e tela principal sem informação
+
+(calculos.py) arquivo contendo alguns calculos básicos que foram mostrados no material de apoio da empresa
+
+(rep.py) arquivo que está manuseando o banco_rigging, criando as tabelas no banco_rigging.py
+
+(requirements.txt) preciso dizer muita coisa? kk, requisitos pra instalar
+
+outros não citados, ainda não foram trabalhados
