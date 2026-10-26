@@ -1,8 +1,13 @@
 import sqlite3
+import os 
 
 class BancoDeDados:
     def __init__(self, nome_arquivo="banco_rigging.sqlite"):
-        self.conexao = sqlite3.connect(nome_arquivo)
+
+        dir_atual = os.path.dirname(os.path.abspath(__file__))
+        caminho_banco = os.path.join(dir_atual, nome_arquivo)
+
+        self.conexao = sqlite3.connect(caminho_banco)
         self.cursor = self.conexao.cursor()
         
         # Força o SQLite a respeitar as Chaves Estrangeiras (FK)
@@ -123,10 +128,89 @@ class BancoDeDados:
                 FOREIGN KEY (ID_acessorio) REFERENCES Acessorio (ID_acessorio)
             )
         ''')
+        
+        # Tabela para o Motor de Fórmulas Customizadas
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS FormulaCustomizada (
+                ID_formula INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome_calculo TEXT NOT NULL,
+                descricao TEXT,
+                variaveis_esperadas TEXT NOT NULL, 
+                expressao_matematica TEXT NOT NULL
+            )
+        ''')
 
         self.conexao.commit()
-        print("Toda a teia do banco de dados foi tecida com sucesso")
+        print("Bancos e relações construidas")
 
-# Teste de terminal
+class RepFormula:
+    def __init__(self, banco):
+        # Recebe a instância da classe BancoDeDados
+        self.conexao = banco.conexao
+        self.cursor = banco.cursor
+
+    # 1. CREATE (Salvar nova fórmula)
+    def salvar_formula(self, nome: str, descricao: str, variaveis: str, expressao: str) -> int:
+        sql = '''
+            INSERT INTO FormulaCustomizada (nome_calculo, descricao, variaveis_esperadas, expressao_matematica)
+            VALUES (?, ?, ?, ?)
+        '''
+        self.cursor.execute(sql, (nome, descricao, variaveis, expressao))
+        self.conexao.commit()
+        return self.cursor.lastrowid # Retorna o ID único que o banco gerou para essa fórmula
+
+    # 2. READ (Buscar/Listar fórmulas)
+    def listar_todas(self) -> list:
+        sql = "SELECT ID_formula, nome_calculo, variaveis_esperadas, expressao_matematica FROM FormulaCustomizada"
+        self.cursor.execute(sql)
+        
+        # fetchall() busca todas as linhas encontradas e entrega como uma lista de tuplas
+        # Exemplo: [(1, 'Fator Vento', 'vento, area', '(vento**2)*area'), (2, ...)]
+        return self.cursor.fetchall()
+
+    def buscar_por_id(self, id_formula: int) -> tuple:
+        sql = "SELECT * FROM FormulaCustomizada WHERE ID_formula = ?"
+        self.cursor.execute(sql, (id_formula,))
+        
+        # fetchone() traz apenas a 1a linha encontrada ou None se não existir
+        return self.cursor.fetchone()
+
+    # 3. UPDATE (Atualizar fórmula existente)
+    def atualizar_formula(self, id_formula: int, nome: str, variaveis: str, expressao: str) -> bool:
+        sql = '''
+            UPDATE FormulaCustomizada 
+            SET nome_calculo = ?, variaveis_esperadas = ?, expressao_matematica = ?
+            WHERE ID_formula = ?
+        '''
+        self.cursor.execute(sql, (nome, variaveis, expressao, id_formula))
+        self.conexao.commit()
+        return self.cursor.rowcount > 0 # Retorna True se alterou alguma linha
+
+    # 4. DELETE (Excluir fórmula)
+    def deletar_formula(self, id_formula: int) -> bool:
+        sql = "DELETE FROM FormulaCustomizada WHERE ID_formula = ?"
+        self.cursor.execute(sql, (id_formula,))
+        self.conexao.commit()
+        return self.cursor.rowcount > 0
+
+
+# Teste isolado do CRUD de fórmulas
 if __name__ == "__main__":
+    
+    # Prepara o banco
     db = BancoDeDados()
+    repo_formula = RepFormula(db)
+    
+    print("--- 1. TESTANDO INSERÇÃO (CREATE) ---")
+    id_criado = repo_formula.salvar_formula(
+        nome="Pressao de Vento Extra",
+        descricao="Cálculo de rajada lateral",
+        variaveis="v, a",
+        expressao="0.613 * (v ** 2) * a"
+    )
+    print(f"Fórmula cadastrada com Sucesso! ID no SQLite: {id_criado}")
+    
+    print("\n--- 2. TESTANDO LEITURA (READ) ---")
+    formulas = repo_formula.listar_todas()
+    for f in formulas:
+        print(f"ID: {f[0]} | Nome: {f[1]} | Vars: {f[2]} | Expressão: {f[3]}")

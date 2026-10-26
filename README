@@ -1,14 +1,37 @@
-primeira versão do aplicativo, explicativa do que contém:
+O objetivo da aplicação é substituir métodos manuais e planilhas por um software local seguro e modular. 
+O sistema gerencia dados de içamento, aplica travas de segurança (como o limite máximo de 85% de Taxa de Utilização - TU para acessórios) 
+e permite que a equipe de engenharia cadastre e execute fórmulas matemáticas personalizadas.
 
+Funcionalidades ja implementadas:
 
-(banco_rigging.sqlite) banco sqlite, motivo pois já é integrado com o python, e suas classes já criadas
+Motor Matemático (core/calculos.py): Execução de cálculos padrão de Rigging (tensões, carga bruta, sapatas) 
+e interpretador dinâmico de equações (MotorFormulasCustomizadas)  {criar novas formulas customizadas}.
 
-(TLogin e TPrincipal) tela de login provisória e tela principal sem informação
+Avaliador Seguro de Expressões: Leitura e execução de fórmulas matemáticas em formato texto via ambiente isolado (sandbox), 
+com suporte a trigonometria (sin, cos, tan, radians), funções algébricas (sqrt, pow, log) e comparadores (max, min).
 
-(calculos.py) arquivo contendo alguns calculos básicos que foram mostrados no material de apoio da empresa
+Construtor e manuseador do banco de Dados Local (DBs/rep.py): Persistência baseada em SQLite com tratamento de caminhos absolutos (os.path), 
+fazendo que o arquivo .sqlite seja criado de forma portátil e desacoplada do diretório de execução. 
+(ps: ninguem rodar o código em outro terminal e cagar com o código)
 
-(rep.py) arquivo que está manuseando o banco_rigging, criando as tabelas no banco_rigging.py
+Banco de dados real(DBs/banco_rigging.sqlite) onde estão as classes que estão as tabelas criadas, relações, dados, etc.
 
-(requirements.txt) preciso dizer muita coisa? kk, requisitos pra instalar
+Camada de Repositório (CRUD): Estrutura da classe RepositorioFormula para operações de Inserção, Consulta, 
+Atualização e Exclusão na tabela FormulaCustomizada.
 
-outros não citados, ainda não foram trabalhados
+Interface Gráfica com CustomTkinter (ui/): Janela principal e formulário de cadastro de 
+fórmulas estruturados através do gerenciador de layout grid.
+
+Arquitetura MVP: Inicialização direta no painel principal, simplificando sem telas de login.
+
+Ferramentas: 
+
+Linguagem: Python 3.x
+
+Interface Gráfica: CustomTkinter (Interface desktop moderna)
+
+Banco de Dados: SQLite3 (Nativo do Python, sem necessidade de servidores externos)
+
+Processamento Matemático: Biblioteca nativa math (Opção por um motor leve e sem dependências externas pesadas como sympy).
+
+Distribuição: Estrutura preparada para compilação em arquivo executável único (.exe) via PyInstaller.

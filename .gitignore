@@ -1,0 +1,39 @@
+# === PYTHON ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# === VIRTUAL ENVIRONMENTS ===
+.venv/
+venv/
+env/
+ENV/
+
+# === DATABASES (SQLite, MySQL, etc.) ===
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# === ENVIRONMENT VARIABLES / SECRETS ===
+.env
+.env.*
+!.env.example
+secrets.json
+
+# === JUPYTER NOTEBOOKS / IPYKERNEL ===
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# === IDEs / EDITORS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
