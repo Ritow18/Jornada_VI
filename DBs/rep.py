@@ -1,5 +1,14 @@
 import sqlite3
 import os 
+import json
+import sys
+from pathlib import Path
+
+raiz_codigo = Path(__file__).resolve().parent.parent
+if str(raiz_codigo) not in sys.path:
+    sys.path.append(str(raiz_codigo))
+
+from core.calculos import CalculadorRigging
 
 class BancoDeDados:
     def __init__(self, nome_arquivo="banco_rigging.sqlite"):
@@ -17,13 +26,6 @@ class BancoDeDados:
 
     def criar_tabelas(self):
         # 1. Tabelas Independentes (Não possuem Chave Estrangeira)
-        
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS Nivel_acesso (
-                ID_role INTEGER PRIMARY KEY AUTOINCREMENT,
-                Nome_role TEXT NOT NULL
-            )
-        ''')
 
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Tipo_acessorio (
@@ -31,6 +33,15 @@ class BancoDeDados:
                 nome_tipo TEXT NOT NULL
             )
         ''')
+        # Verifica se a tabela já possui registros, se estiver vazia, insere os tipos padrão
+        self.cursor.execute("SELECT COUNT(*) FROM Tipo_acessorio")
+        if self.cursor.fetchone()[0] == 0:
+            self.cursor.executemany(
+                "INSERT INTO Tipo_acessorio (nome_tipo) VALUES (?)",
+                [("Cinta Tubular",), ("Manilha",), ("Balancim",), ("Manilha Curva",)]
+            )
+            self.conexao.commit()
+        
 
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Guindaste (
@@ -39,19 +50,6 @@ class BancoDeDados:
                 fabricante TEXT NOT NULL,
                 capac_max_base_ton REAL NOT NULL,
                 tabelaCarga_JSON TEXT
-            )
-        ''')
-
-        # 2. Tabelas Nível 1 (Dependem das tabelas acima)
-
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS Usuario (
-                ID_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
-                ID_role INTEGER NOT NULL,
-                Reg_profissional TEXT NOT NULL,
-                Nome_completo TEXT NOT NULL,
-                Senha_hash TEXT NOT NULL,
-                FOREIGN KEY (ID_role) REFERENCES Nivel_acesso (ID_role)
             )
         ''')
 
@@ -92,7 +90,6 @@ class BancoDeDados:
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS PlanoRigging (
                 ID_plano INTEGER PRIMARY KEY AUTOINCREMENT,
-                ID_usuario_criador INTEGER NOT NULL,
                 ID_guindaste INTEGER NOT NULL,
                 numeroPlano TEXT NOT NULL,
                 cliente TEXT NOT NULL,
@@ -100,7 +97,6 @@ class BancoDeDados:
                 raioOperacao REAL NOT NULL,
                 velocidadeVento REAL,
                 statusAprovacao INTEGER, 
-                FOREIGN KEY (ID_usuario_criador) REFERENCES Usuario (ID_usuario),
                 FOREIGN KEY (ID_guindaste) REFERENCES Guindaste (ID_guindaste)
             )
         ''')
@@ -141,11 +137,9 @@ class BancoDeDados:
         ''')
 
         self.conexao.commit()
-        print("Bancos e relações construidas")
 
 class RepFormula:
     def __init__(self, banco):
-        # Recebe a instância da classe BancoDeDados
         self.conexao = banco.conexao
         self.cursor = banco.cursor
 
@@ -163,16 +157,11 @@ class RepFormula:
     def listar_todas(self) -> list:
         sql = "SELECT ID_formula, nome_calculo, variaveis_esperadas, expressao_matematica FROM FormulaCustomizada"
         self.cursor.execute(sql)
-        
-        # fetchall() busca todas as linhas encontradas e entrega como uma lista de tuplas
-        # Exemplo: [(1, 'Fator Vento', 'vento, area', '(vento**2)*area'), (2, ...)]
         return self.cursor.fetchall()
 
     def buscar_por_id(self, id_formula: int) -> tuple:
         sql = "SELECT * FROM FormulaCustomizada WHERE ID_formula = ?"
         self.cursor.execute(sql, (id_formula,))
-        
-        # fetchone() traz apenas a 1a linha encontrada ou None se não existir
         return self.cursor.fetchone()
 
     # 3. UPDATE (Atualizar fórmula existente)
@@ -193,24 +182,85 @@ class RepFormula:
         self.conexao.commit()
         return self.cursor.rowcount > 0
 
+class RepGuindaste:
+    def __init__(self, banco):
+        self.conexao = banco.conexao
+        self.cursor = banco.cursor
 
-# Teste isolado do CRUD de fórmulas
+    # 1. CREATE (Cadastrar Guindaste com Tabela de Carga em JSON)
+    def salvar_guindaste(self, modelo: str, fabricante: str, capac_max_ton: float, tabela_carga: dict) -> int:
+        # Converte o dicionário Python para uma string formatada em JSON
+        tabela_json = json.dumps(tabela_carga)
+        
+        sql = '''
+            INSERT INTO Guindaste (modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON)
+            VALUES (?, ?, ?, ?)
+        '''
+        self.cursor.execute(sql, (modelo, fabricante, capac_max_ton, tabela_json))
+        self.conexao.commit()
+        return self.cursor.lastrowid
+    
+    # 4. DELETE (Excluir Guindaste)
+    def deletar_guindaste(self, id_guindaste: int) -> bool:
+        sql = "DELETE FROM Guindaste WHERE ID_guindaste = ?"
+        self.cursor.execute(sql, (id_guindaste,))
+        self.conexao.commit()
+        return self.cursor.rowcount > 0
+
+    # 2. READ (Buscar Guindaste por ID e converter JSON de volta para Dicionário)
+    def buscar_por_id(self, id_guindaste: int) -> dict:
+        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON FROM Guindaste WHERE ID_guindaste = ?"
+        self.cursor.execute(sql, (id_guindaste,))
+        linha = self.cursor.fetchone()
+        
+        if not linha:
+            return None
+            
+        return {
+            "id": linha[0],
+            "modelo": linha[1],
+            "fabricante": linha[2],
+            "capac_max_base_ton": linha[3],
+            "tabela_carga": json.loads(linha[4]) if linha[4] else {}
+        }
+
+    # 3. READ ALL (Listar toda a frota cadastrada)
+    def listar_todos(self) -> list:
+        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton FROM Guindaste"
+        self.cursor.execute(sql)
+        return self.cursor.fetchall()
+
+class RepAcessorio:
+    def __init__(self, banco):
+        self.conexao = banco.conexao
+        self.cursor = banco.cursor
+
+    def salvar_acessorio(self, tipo_id: int, cod: str, capac: float, desgaste: float) -> int:
+        sql = '''
+            INSERT INTO Acessorio (ID_tipo_acessorio, codIdentificacao, capac_carga_ton, desgaste_perc)
+            VALUES (?, ?, ?, ?)
+        '''
+        self.cursor.execute(sql, (tipo_id, cod, capac, desgaste))
+        self.conexao.commit()
+        return self.cursor.lastrowid
+
+    def listar_todos(self) -> list:
+        sql = '''
+            SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao, a.capac_carga_ton, a.desgaste_perc 
+            FROM Acessorio a
+            LEFT JOIN Tipo_acessorio t ON a.ID_tipo_acessorio = t.ID_tipo_acessorio
+        '''
+        self.cursor.execute(sql)
+        return self.cursor.fetchall()
+
+    def deletar_acessorio(self, id_acessorio: int) -> bool:
+        sql = "DELETE FROM Acessorio WHERE ID_acessorio = ?"
+        self.cursor.execute(sql, (id_acessorio,))
+        self.conexao.commit()
+        return self.cursor.rowcount > 0
+
 if __name__ == "__main__":
     
-    # Prepara o banco
     db = BancoDeDados()
-    repo_formula = RepFormula(db)
+    repo_formula = RepFormula(db)   
     
-    print("--- 1. TESTANDO INSERÇÃO (CREATE) ---")
-    id_criado = repo_formula.salvar_formula(
-        nome="Pressao de Vento Extra",
-        descricao="Cálculo de rajada lateral",
-        variaveis="v, a",
-        expressao="0.613 * (v ** 2) * a"
-    )
-    print(f"Fórmula cadastrada com Sucesso! ID no SQLite: {id_criado}")
-    
-    print("\n--- 2. TESTANDO LEITURA (READ) ---")
-    formulas = repo_formula.listar_todas()
-    for f in formulas:
-        print(f"ID: {f[0]} | Nome: {f[1]} | Vars: {f[2]} | Expressão: {f[3]}")

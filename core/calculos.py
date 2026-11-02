@@ -63,8 +63,58 @@ class CalculadorRigging:
         rmet = esforco_sapata_kgf / area_patolamento_cm2
         return round(rmet, 2)
 
+    @staticmethod
+    def interpolar_capacidade(tabela_carga: dict, comprimento_lanca: float, raio_operacao: float) -> float:
+        
+        # As chaves do JSON são strings; convertemos a lança buscada para encontrar a chave exata
+        chave_lanca = str(float(comprimento_lanca))
+        
+        # Fallback caso a chave no JSON esteja sem casa decimal (ex: "30" em vez de "30.0")
+        if chave_lanca not in tabela_carga:
+            chave_lanca_int = str(int(comprimento_lanca))
+            if chave_lanca_int in tabela_carga:
+                chave_lanca = chave_lanca_int
+            else:
+                raise ValueError(f"Comprimento de lança ({comprimento_lanca}m) não encontrado na tabela deste guindaste.")
+
+        curva_raios = tabela_carga[chave_lanca]
+        
+        # Extrai os raios disponíveis, converte para float e ordena de forma crescente
+        raios_disponiveis = sorted([float(r) for r in curva_raios.keys()])
+        
+        # Trava de segurança: Não permitir extrapolação fora dos limites do fabricante
+        if raio_operacao < raios_disponiveis[0] or raio_operacao > raios_disponiveis[-1]:
+            raise ValueError(
+                f"Raio de {raio_operacao}m fora dos limites seguros para a lança de {comprimento_lanca}m "
+                f"(Mín: {raios_disponiveis[0]}m | Máx: {raios_disponiveis[-1]}m)."
+            )
+
+        # 1. Caso o raio seja um valor exato na tabela, retorna direto sem interpolar
+        for r in raios_disponiveis:
+            if math.isclose(raio_operacao, r, abs_tol=1e-4):
+                # Busca na string original (seja "10" ou "10.0")
+                chave_r = str(r) if str(r) in curva_raios else str(int(r))
+                return round(float(curva_raios[chave_r]), 2)
+
+        # 2. Busca os pontos imediatamente inferior (r1) e superior (r2) para interpolar
+        for i in range(len(raios_disponiveis) - 1):
+            r1 = raios_disponiveis[i]
+            r2 = raios_disponiveis[i + 1]
+            
+            if r1 < raio_operacao < r2:
+                chave_r1 = str(r1) if str(r1) in curva_raios else str(int(r1))
+                chave_r2 = str(r2) if str(r2) in curva_raios else str(int(r2))
+                
+                c1 = float(curva_raios[chave_r1])
+                c2 = float(curva_raios[chave_r2])
+                
+                # Fórmula da Interpolação Linear
+                capacidade_interpolada = c1 + ((raio_operacao - r1) / (r2 - r1)) * (c2 - c1)
+                return round(capacidade_interpolada, 2)
+
+        raise ValueError("Erro inesperado ao processar a interpolação da tabela de carga.")
+
 class MotorFormulasCustomizadas:
-    
     # Interpretador seguro completo. trigonometria, logaritmos, exponenciação e comparadores nativos.
     @staticmethod
     def avaliar_expressao(expressao: str, valores_variaveis: dict) -> float:
