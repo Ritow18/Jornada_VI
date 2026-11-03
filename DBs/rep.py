@@ -8,32 +8,24 @@ raiz_codigo = Path(__file__).resolve().parent.parent
 if str(raiz_codigo) not in sys.path:
     sys.path.append(str(raiz_codigo))
 
-from core.calculos import CalculadorRigging
+from DBs.rep_plano import migrar_schema_plano
 
 class BancoDeDados:
     def __init__(self, nome_arquivo="banco_rigging.sqlite"):
-
         dir_atual = os.path.dirname(os.path.abspath(__file__))
         caminho_banco = os.path.join(dir_atual, nome_arquivo)
-
         self.conexao = sqlite3.connect(caminho_banco)
         self.cursor = self.conexao.cursor()
-        
-        # Força o SQLite a respeitar as Chaves Estrangeiras (FK)
         self.cursor.execute("PRAGMA foreign_keys = ON;")
-        
         self.criar_tabelas()
 
     def criar_tabelas(self):
-        # 1. Tabelas Independentes (Não possuem Chave Estrangeira)
-
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Tipo_acessorio (
                 ID_tipo_acessorio INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome_tipo TEXT NOT NULL
             )
         ''')
-        # Verifica se a tabela já possui registros, se estiver vazia, insere os tipos padrão
         self.cursor.execute("SELECT COUNT(*) FROM Tipo_acessorio")
         if self.cursor.fetchone()[0] == 0:
             self.cursor.executemany(
@@ -41,7 +33,6 @@ class BancoDeDados:
                 [("Cinta Tubular",), ("Manilha",), ("Balancim",), ("Manilha Curva",)]
             )
             self.conexao.commit()
-        
 
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Guindaste (
@@ -49,7 +40,8 @@ class BancoDeDados:
                 modelo TEXT NOT NULL,
                 fabricante TEXT NOT NULL,
                 capac_max_base_ton REAL NOT NULL,
-                tabelaCarga_JSON TEXT
+                tabelaCarga_JSON TEXT,
+                dataCadastro TEXT
             )
         ''')
 
@@ -61,11 +53,16 @@ class BancoDeDados:
                 capac_carga_ton REAL NOT NULL,
                 desgaste_perc REAL NOT NULL,
                 dataUltimaInspecao TEXT,
+                dataCadastro TEXT,
+                peso_unitario_kg REAL DEFAULT 0,
                 FOREIGN KEY (ID_tipo_acessorio) REFERENCES Tipo_acessorio (ID_tipo_acessorio)
             )
         ''')
 
-        # 3. Tabelas de Extensão/Herança (Chave Primária = Chave Estrangeira)
+        for tabela in ("Acessorio", "Guindaste"):
+            colunas = [c[1] for c in self.cursor.execute(f"PRAGMA table_info({tabela})").fetchall()]
+            if "dataCadastro" not in colunas:
+                self.cursor.execute(f"ALTER TABLE {tabela} ADD COLUMN dataCadastro TEXT")
 
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Cinta_Tubular (
@@ -84,8 +81,6 @@ class BancoDeDados:
                 FOREIGN KEY (ID_acessorio) REFERENCES Acessorio (ID_acessorio) ON DELETE CASCADE
             )
         ''')
-
-        # 4. Tabelas Operacionais e Associativas
 
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS PlanoRigging (
@@ -125,7 +120,6 @@ class BancoDeDados:
             )
         ''')
         
-        # Tabela para o Motor de Fórmulas Customizadas
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS FormulaCustomizada (
                 ID_formula INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,6 +130,7 @@ class BancoDeDados:
             )
         ''')
 
+        migrar_schema_plano(self.conexao)
         self.conexao.commit()
 
 class RepFormula:
@@ -143,17 +138,13 @@ class RepFormula:
         self.conexao = banco.conexao
         self.cursor = banco.cursor
 
-    # 1. CREATE (Salvar nova fórmula)
     def salvar_formula(self, nome: str, descricao: str, variaveis: str, expressao: str) -> int:
-        sql = '''
-            INSERT INTO FormulaCustomizada (nome_calculo, descricao, variaveis_esperadas, expressao_matematica)
-            VALUES (?, ?, ?, ?)
-        '''
+        sql = '''INSERT INTO FormulaCustomizada (nome_calculo, descricao, variaveis_esperadas, expressao_matematica)
+                 VALUES (?, ?, ?, ?)'''
         self.cursor.execute(sql, (nome, descricao, variaveis, expressao))
         self.conexao.commit()
-        return self.cursor.lastrowid # Retorna o ID único que o banco gerou para essa fórmula
+        return self.cursor.lastrowid 
 
-    # 2. READ (Buscar/Listar fórmulas)
     def listar_todas(self) -> list:
         sql = "SELECT ID_formula, nome_calculo, variaveis_esperadas, expressao_matematica FROM FormulaCustomizada"
         self.cursor.execute(sql)
@@ -164,18 +155,12 @@ class RepFormula:
         self.cursor.execute(sql, (id_formula,))
         return self.cursor.fetchone()
 
-    # 3. UPDATE (Atualizar fórmula existente)
     def atualizar_formula(self, id_formula: int, nome: str, variaveis: str, expressao: str) -> bool:
-        sql = '''
-            UPDATE FormulaCustomizada 
-            SET nome_calculo = ?, variaveis_esperadas = ?, expressao_matematica = ?
-            WHERE ID_formula = ?
-        '''
+        sql = '''UPDATE FormulaCustomizada SET nome_calculo = ?, variaveis_esperadas = ?, expressao_matematica = ? WHERE ID_formula = ?'''
         self.cursor.execute(sql, (nome, variaveis, expressao, id_formula))
         self.conexao.commit()
-        return self.cursor.rowcount > 0 # Retorna True se alterou alguma linha
+        return self.cursor.rowcount > 0 
 
-    # 4. DELETE (Excluir fórmula)
     def deletar_formula(self, id_formula: int) -> bool:
         sql = "DELETE FROM FormulaCustomizada WHERE ID_formula = ?"
         self.cursor.execute(sql, (id_formula,))
@@ -187,35 +172,26 @@ class RepGuindaste:
         self.conexao = banco.conexao
         self.cursor = banco.cursor
 
-    # 1. CREATE (Cadastrar Guindaste com Tabela de Carga em JSON)
     def salvar_guindaste(self, modelo: str, fabricante: str, capac_max_ton: float, tabela_carga: dict) -> int:
-        # Converte o dicionário Python para uma string formatada em JSON
         tabela_json = json.dumps(tabela_carga)
-        
-        sql = '''
-            INSERT INTO Guindaste (modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON)
-            VALUES (?, ?, ?, ?)
-        '''
+        sql = '''INSERT INTO Guindaste (modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON, dataCadastro)
+                 VALUES (?, ?, ?, ?, datetime('now', 'localtime'))'''
         self.cursor.execute(sql, (modelo, fabricante, capac_max_ton, tabela_json))
         self.conexao.commit()
         return self.cursor.lastrowid
     
-    # 4. DELETE (Excluir Guindaste)
     def deletar_guindaste(self, id_guindaste: int) -> bool:
         sql = "DELETE FROM Guindaste WHERE ID_guindaste = ?"
         self.cursor.execute(sql, (id_guindaste,))
         self.conexao.commit()
         return self.cursor.rowcount > 0
 
-    # 2. READ (Buscar Guindaste por ID e converter JSON de volta para Dicionário)
     def buscar_por_id(self, id_guindaste: int) -> dict:
         sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON FROM Guindaste WHERE ID_guindaste = ?"
         self.cursor.execute(sql, (id_guindaste,))
         linha = self.cursor.fetchone()
-        
         if not linha:
             return None
-            
         return {
             "id": linha[0],
             "modelo": linha[1],
@@ -224,9 +200,9 @@ class RepGuindaste:
             "tabela_carga": json.loads(linha[4]) if linha[4] else {}
         }
 
-    # 3. READ ALL (Listar toda a frota cadastrada)
     def listar_todos(self) -> list:
-        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton FROM Guindaste"
+        # CORREÇÃO: Adicionado dataCadastro para o TFrota do Rodrigo não quebrar
+        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton, dataCadastro FROM Guindaste"
         self.cursor.execute(sql)
         return self.cursor.fetchall()
 
@@ -235,20 +211,21 @@ class RepAcessorio:
         self.conexao = banco.conexao
         self.cursor = banco.cursor
 
-    def salvar_acessorio(self, tipo_id: int, cod: str, capac: float, desgaste: float) -> int:
+    def salvar_acessorio(self, tipo_id: int, cod: str, capac: float, desgaste: float, peso_kg: float = 0.0) -> int:
         sql = '''
-            INSERT INTO Acessorio (ID_tipo_acessorio, codIdentificacao, capac_carga_ton, desgaste_perc)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO Acessorio (ID_tipo_acessorio, codIdentificacao, capac_carga_ton, desgaste_perc, peso_unitario_kg, dataCadastro)
+            VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
         '''
-        self.cursor.execute(sql, (tipo_id, cod, capac, desgaste))
+        self.cursor.execute(sql, (tipo_id, cod, capac, desgaste, peso_kg))
         self.conexao.commit()
         return self.cursor.lastrowid
 
     def listar_todos(self) -> list:
         sql = '''
-            SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao, a.capac_carga_ton, a.desgaste_perc 
+            SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao, a.capac_carga_ton, a.desgaste_perc, a.dataCadastro, COALESCE(a.peso_unitario_kg, 0)
             FROM Acessorio a
             LEFT JOIN Tipo_acessorio t ON a.ID_tipo_acessorio = t.ID_tipo_acessorio
+            ORDER BY a.dataCadastro DESC, a.ID_acessorio DESC
         '''
         self.cursor.execute(sql)
         return self.cursor.fetchall()
@@ -260,7 +237,4 @@ class RepAcessorio:
         return self.cursor.rowcount > 0
 
 if __name__ == "__main__":
-    
     db = BancoDeDados()
-    repo_formula = RepFormula(db)   
-    

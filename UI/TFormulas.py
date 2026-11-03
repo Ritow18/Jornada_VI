@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from DBs.rep import BancoDeDados, RepFormula
+from core.calculos import FORMULAS_FIXAS
 
 class TelaCriarFormula(ctk.CTkFrame):
     def __init__(self, master):
@@ -38,10 +39,20 @@ class TelaCriarFormula(ctk.CTkFrame):
         self.btn_salvar = ctk.CTkButton(self.frame_cadastro, text="Salvar Fórmula", command=self.salvar_nova, fg_color="#2ECC71", hover_color="#27AE60", height=40)
         self.btn_salvar.pack(pady=20)
 
-        # ================= DIREITA: LISTAGEM =================
-        self.frame_lista = ctk.CTkScrollableFrame(self, label_text="Fórmulas Cadastradas")
-        self.frame_lista.grid(row=1, column=1, padx=20, pady=10, sticky="nsew")
-        
+        # ================= DIREITA: FIXAS (em cima) + CADASTRADAS (embaixo) =================
+        frame_direita = ctk.CTkFrame(self, fg_color="transparent")
+        frame_direita.grid(row=1, column=1, padx=20, pady=10, sticky="nsew")
+        frame_direita.grid_columnconfigure(0, weight=1)
+        frame_direita.grid_rowconfigure(0, weight=1)
+        frame_direita.grid_rowconfigure(1, weight=1)
+
+        self.frame_fixas = ctk.CTkScrollableFrame(frame_direita, label_text="Fórmulas Fixas (clique para usar)")
+        self.frame_fixas.grid(row=0, column=0, pady=(0, 5), sticky="nsew")
+
+        self.frame_lista = ctk.CTkScrollableFrame(frame_direita, label_text="Fórmulas Cadastradas (clique para usar)")
+        self.frame_lista.grid(row=1, column=0, pady=(5, 0), sticky="nsew")
+
+        self.carregar_fixas()
         self.carregar_lista()
 
     def criar_teclado(self):
@@ -93,28 +104,60 @@ class TelaCriarFormula(ctk.CTkFrame):
         else:
             self.inp_expr.insert('end', simbolo)
 
+    def usar_formula(self, variaveis, expressao):
+        # Joga a fórmula escolhida na calculadora (campos Variáveis e Fórmula)
+        self.inp_vars.delete(0, 'end')
+        self.inp_vars.insert(0, variaveis)
+        self.inp_expr.delete(0, 'end')
+        self.inp_expr.insert(0, expressao)
+
+    @staticmethod
+    def _tornar_clicavel(widgets, comando):
+        for w in widgets:
+            w.bind("<Button-1>", lambda e, cmd=comando: cmd())
+
+    def carregar_fixas(self):
+        # Fórmulas fixas vêm do catálogo FORMULAS_FIXAS em core/calculos.py
+        for f in FORMULAS_FIXAS:
+            card = ctk.CTkFrame(self.frame_fixas, fg_color="#2b2b2b")
+            card.pack(fill="x", pady=5, padx=5)
+
+            lbl_nome = ctk.CTkLabel(card, text=f["nome"], font=("Roboto", 13, "bold"), anchor="w", justify="left")
+            lbl_nome.pack(anchor="w", padx=10, pady=(8, 0))
+
+            detalhes = f"{f['descricao']}\nVars: {f['variaveis']}\nExpr: {f['expressao']}"
+            lbl_info = ctk.CTkLabel(card, text=detalhes, font=("Roboto", 11), anchor="w", justify="left", wraplength=280)
+            lbl_info.pack(anchor="w", padx=10, pady=(0, 8))
+
+            self._tornar_clicavel([card, lbl_nome, lbl_info],
+                                  lambda v=f["variaveis"], x=f["expressao"]: self.usar_formula(v, x))
+
     def carregar_lista(self):
         for widget in self.frame_lista.winfo_children():
             widget.destroy()
 
         formulas = self.repo.listar_todas()
-        
+
         if not formulas:
             ctk.CTkLabel(self.frame_lista, text="Nenhuma fórmula cadastrada.").pack(pady=20)
             return
 
         for f in formulas:
             id_f, nome, vars_esp, expr = f[0], f[1], f[2], f[3]
-            
+
             card = ctk.CTkFrame(self.frame_lista, fg_color="#2b2b2b")
             card.pack(fill="x", pady=5, padx=5)
-            
-            info = f"{nome}\nVars: {vars_esp} | Expr: {expr}"
-            ctk.CTkLabel(card, text=info, font=("Roboto", 12), justify="left").pack(side="left", padx=10, pady=10)
-            
+
             btn_del = ctk.CTkButton(card, text="Excluir", width=60, fg_color="#E74C3C", hover_color="#C0392B",
                                     command=lambda i=id_f: self.deletar(i))
             btn_del.pack(side="right", padx=10, pady=10)
+
+            info = f"{nome}\nVars: {vars_esp} | Expr: {expr}"
+            lbl_info = ctk.CTkLabel(card, text=info, font=("Roboto", 12), justify="left", anchor="w", wraplength=210)
+            lbl_info.pack(side="left", padx=10, pady=10)
+
+            self._tornar_clicavel([card, lbl_info],
+                                  lambda v=vars_esp, x=expr: self.usar_formula(v, x))
 
     def salvar_nova(self):
         nome = self.inp_nome.get()

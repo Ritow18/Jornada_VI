@@ -37,6 +37,10 @@ Gerencia o banco local `banco_rigging.sqlite` com resolução automática de cam
    * Desenvolver um módulo para capturar os dados processados na tela de simulação (`TOperacao.py`) e exportar um laudo/plano de rigging completo em formato PDF ou Excel.
    * O relatório deve conter os dados do guindaste, geometria do içamento, cálculos de segurança e o parecer técnico final.
 
-2. Integração Plena das Fórmulas Customizadas
+2. Integração das Fórmulas Customizadas
    * Atualmente, o sistema cria e armazena fórmulas personalizadas de forma excelente. O próximo passo é integrar esse repositório à tela de Operação.
    * Objetivo: Permitir que o engenheiro selecione uma fórmula cadastrada, insira os valores das variáveis criadas, e o sistema utilize o motor de cálculo para aplicar esse resultado adicional ao içamento (ex: adicionar uma taxa de vento dinâmica ao peso da carga).
+
+3. Acessórios criados terem algum uso além de só armazenamento
+4. formulas padrão de calculo terem algum uso junto com as formulas personalizadas
+5. arrumar a tela
