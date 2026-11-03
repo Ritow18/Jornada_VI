@@ -162,6 +162,48 @@ class MotorFormulasCustomizadas:
         except Exception as e:
             raise ValueError(f"Erro inesperado no cálculo: {e}")
 
+# Catálogo das fórmulas fixas do CalculadorRigging, escritas como expressões que o
+# MotorFormulasCustomizadas consegue avaliar. É exibido na tela Gestão de Fórmulas
+# e, ao clicar, a expressão vai para a calculadora. Se mudar um cálculo acima, atualize aqui.
+FORMULAS_FIXAS = [
+    {
+        "nome": "Carga Bruta",
+        "descricao": "Soma o peso líquido da carga com os acessórios (lingada e balancim).",
+        "variaveis": "peso_liquido, peso_lingada, peso_balancim",
+        "expressao": "peso_liquido + peso_lingada + peso_balancim",
+    },
+    {
+        "nome": "Tensão na Cinta",
+        "descricao": "Tensão em cada perna da cinta, considerando a inclinação em relação à vertical.",
+        "variaveis": "peso_aplicado, angulo_graus, quantidade_pernas",
+        "expressao": "(1 / cos(radians(angulo_graus))) * (peso_aplicado / quantidade_pernas)",
+    },
+    {
+        "nome": "Taxa de Utilização (TU)",
+        "descricao": "Percentual da capacidade nominal em uso. Limite de segurança: 85%.",
+        "variaveis": "carga_atuante, capacidade_nominal",
+        "expressao": "(carga_atuante / capacidade_nominal) * 100",
+    },
+    {
+        "nome": "Esforço nas Sapatas (kgf)",
+        "descricao": "Esforço máximo em uma das sapatas do guindaste.",
+        "variaveis": "peso_guindaste_caminhao_kgf, peso_carga_kgf, raio_operacao_m, dist_eixo_sapata_m, abertura_sapatas_m",
+        "expressao": "(peso_guindaste_caminhao_kgf / 2) + (peso_carga_kgf * raio_operacao_m) / (dist_eixo_sapata_m + abertura_sapatas_m)",
+    },
+    {
+        "nome": "RMET (kgf/cm²)",
+        "descricao": "Resistência Mínima Exigida do Terreno, pela área de patolamento.",
+        "variaveis": "esforco_sapata_kgf, largura_dormente_cm, comprimento_dormente_cm, qtd_dormentes",
+        "expressao": "esforco_sapata_kgf / (largura_dormente_cm * comprimento_dormente_cm * qtd_dormentes)",
+    },
+    {
+        "nome": "Interpolação Linear de Capacidade",
+        "descricao": "Capacidade para um raio entre dois pontos (r1, c1) e (r2, c2) da tabela de carga.",
+        "variaveis": "raio_operacao, r1, r2, c1, c2",
+        "expressao": "c1 + ((raio_operacao - r1) / (r2 - r1)) * (c2 - c1)",
+    },
+]
+
 # Teste com fórmula complexa
 if __name__ == "__main__":
     motor = MotorFormulasCustomizadas()

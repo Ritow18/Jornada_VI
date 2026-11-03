@@ -49,7 +49,8 @@ class BancoDeDados:
                 modelo TEXT NOT NULL,
                 fabricante TEXT NOT NULL,
                 capac_max_base_ton REAL NOT NULL,
-                tabelaCarga_JSON TEXT
+                tabelaCarga_JSON TEXT,
+                dataCadastro TEXT
             )
         ''')
 
@@ -61,9 +62,16 @@ class BancoDeDados:
                 capac_carga_ton REAL NOT NULL,
                 desgaste_perc REAL NOT NULL,
                 dataUltimaInspecao TEXT,
+                dataCadastro TEXT,
                 FOREIGN KEY (ID_tipo_acessorio) REFERENCES Tipo_acessorio (ID_tipo_acessorio)
             )
         ''')
+
+        # Migração: bancos criados antes desta versão não têm a coluna dataCadastro
+        for tabela in ("Acessorio", "Guindaste"):
+            colunas = [c[1] for c in self.cursor.execute(f"PRAGMA table_info({tabela})").fetchall()]
+            if "dataCadastro" not in colunas:
+                self.cursor.execute(f"ALTER TABLE {tabela} ADD COLUMN dataCadastro TEXT")
 
         # 3. Tabelas de Extensão/Herança (Chave Primária = Chave Estrangeira)
 
@@ -193,8 +201,8 @@ class RepGuindaste:
         tabela_json = json.dumps(tabela_carga)
         
         sql = '''
-            INSERT INTO Guindaste (modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO Guindaste (modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON, dataCadastro)
+            VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
         '''
         self.cursor.execute(sql, (modelo, fabricante, capac_max_ton, tabela_json))
         self.conexao.commit()
@@ -226,7 +234,7 @@ class RepGuindaste:
 
     # 3. READ ALL (Listar toda a frota cadastrada)
     def listar_todos(self) -> list:
-        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton FROM Guindaste"
+        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton, dataCadastro FROM Guindaste"
         self.cursor.execute(sql)
         return self.cursor.fetchall()
 
@@ -237,8 +245,8 @@ class RepAcessorio:
 
     def salvar_acessorio(self, tipo_id: int, cod: str, capac: float, desgaste: float) -> int:
         sql = '''
-            INSERT INTO Acessorio (ID_tipo_acessorio, codIdentificacao, capac_carga_ton, desgaste_perc)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO Acessorio (ID_tipo_acessorio, codIdentificacao, capac_carga_ton, desgaste_perc, dataCadastro)
+            VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
         '''
         self.cursor.execute(sql, (tipo_id, cod, capac, desgaste))
         self.conexao.commit()
@@ -246,9 +254,10 @@ class RepAcessorio:
 
     def listar_todos(self) -> list:
         sql = '''
-            SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao, a.capac_carga_ton, a.desgaste_perc 
+            SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao, a.capac_carga_ton, a.desgaste_perc, a.dataCadastro
             FROM Acessorio a
             LEFT JOIN Tipo_acessorio t ON a.ID_tipo_acessorio = t.ID_tipo_acessorio
+            ORDER BY a.dataCadastro DESC, a.ID_acessorio DESC
         '''
         self.cursor.execute(sql)
         return self.cursor.fetchall()
@@ -262,5 +271,4 @@ class RepAcessorio:
 if __name__ == "__main__":
     
     db = BancoDeDados()
-    repo_formula = RepFormula(db)   
-    
+    repo_formula = RepFormula(db)
