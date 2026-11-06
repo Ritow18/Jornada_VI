@@ -34,23 +34,25 @@ class BancoDeDados:
             )
             self.conexao.commit()
 
+        # ALTERADO: capac_max_base_ton -> capac_max_base_kg
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Guindaste (
                 ID_guindaste INTEGER PRIMARY KEY AUTOINCREMENT,
                 modelo TEXT NOT NULL,
                 fabricante TEXT NOT NULL,
-                capac_max_base_ton REAL NOT NULL,
+                capac_max_base_kg REAL NOT NULL, 
                 tabelaCarga_JSON TEXT,
                 dataCadastro TEXT
             )
         ''')
 
+        # ALTERADO: capac_carga_ton -> capac_carga_kg
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Acessorio (
                 ID_acessorio INTEGER PRIMARY KEY AUTOINCREMENT,
                 ID_tipo_acessorio INTEGER NOT NULL,
                 codIdentificacao TEXT NOT NULL,
-                capac_carga_ton REAL NOT NULL,
+                capac_carga_kg REAL NOT NULL, 
                 desgaste_perc REAL NOT NULL,
                 dataUltimaInspecao TEXT,
                 dataCadastro TEXT,
@@ -96,12 +98,13 @@ class BancoDeDados:
             )
         ''')
 
+        # ALTERADO: pesoLiquido_ton -> pesoLiquido_kg
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Carga (
                 ID_carga INTEGER PRIMARY KEY AUTOINCREMENT,
                 ID_plano INTEGER NOT NULL,
                 descricao TEXT NOT NULL,
-                pesoLiquido_ton REAL NOT NULL,
+                pesoLiquido_kg REAL NOT NULL, 
                 comprimento_m REAL,
                 largura_m REAL,
                 altura_m REAL,
@@ -172,11 +175,11 @@ class RepGuindaste:
         self.conexao = banco.conexao
         self.cursor = banco.cursor
 
-    def salvar_guindaste(self, modelo: str, fabricante: str, capac_max_ton: float, tabela_carga: dict) -> int:
+    def salvar_guindaste(self, modelo: str, fabricante: str, capac_max_kg: float, tabela_carga: dict) -> int:
         tabela_json = json.dumps(tabela_carga)
-        sql = '''INSERT INTO Guindaste (modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON, dataCadastro)
+        sql = '''INSERT INTO Guindaste (modelo, fabricante, capac_max_base_kg, tabelaCarga_JSON, dataCadastro)
                  VALUES (?, ?, ?, ?, datetime('now', 'localtime'))'''
-        self.cursor.execute(sql, (modelo, fabricante, capac_max_ton, tabela_json))
+        self.cursor.execute(sql, (modelo, fabricante, capac_max_kg, tabela_json))
         self.conexao.commit()
         return self.cursor.lastrowid
     
@@ -187,7 +190,7 @@ class RepGuindaste:
         return self.cursor.rowcount > 0
 
     def buscar_por_id(self, id_guindaste: int) -> dict:
-        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton, tabelaCarga_JSON FROM Guindaste WHERE ID_guindaste = ?"
+        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_kg, tabelaCarga_JSON FROM Guindaste WHERE ID_guindaste = ?"
         self.cursor.execute(sql, (id_guindaste,))
         linha = self.cursor.fetchone()
         if not linha:
@@ -196,13 +199,12 @@ class RepGuindaste:
             "id": linha[0],
             "modelo": linha[1],
             "fabricante": linha[2],
-            "capac_max_base_ton": linha[3],
+            "capac_max_base_kg": linha[3],
             "tabela_carga": json.loads(linha[4]) if linha[4] else {}
         }
 
     def listar_todos(self) -> list:
-        # CORREÇÃO: Adicionado dataCadastro para o TFrota do Rodrigo não quebrar
-        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_ton, dataCadastro FROM Guindaste"
+        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_kg, dataCadastro FROM Guindaste"
         self.cursor.execute(sql)
         return self.cursor.fetchall()
 
@@ -211,18 +213,18 @@ class RepAcessorio:
         self.conexao = banco.conexao
         self.cursor = banco.cursor
 
-    def salvar_acessorio(self, tipo_id: int, cod: str, capac: float, desgaste: float, peso_kg: float = 0.0) -> int:
+    def salvar_acessorio(self, tipo_id: int, cod: str, capac_kg: float, desgaste: float, peso_kg: float = 0.0) -> int:
         sql = '''
-            INSERT INTO Acessorio (ID_tipo_acessorio, codIdentificacao, capac_carga_ton, desgaste_perc, peso_unitario_kg, dataCadastro)
+            INSERT INTO Acessorio (ID_tipo_acessorio, codIdentificacao, capac_carga_kg, desgaste_perc, peso_unitario_kg, dataCadastro)
             VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
         '''
-        self.cursor.execute(sql, (tipo_id, cod, capac, desgaste, peso_kg))
+        self.cursor.execute(sql, (tipo_id, cod, capac_kg, desgaste, peso_kg))
         self.conexao.commit()
         return self.cursor.lastrowid
 
     def listar_todos(self) -> list:
         sql = '''
-            SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao, a.capac_carga_ton, a.desgaste_perc, a.dataCadastro, COALESCE(a.peso_unitario_kg, 0)
+            SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao, a.capac_carga_kg, a.desgaste_perc, a.dataCadastro, COALESCE(a.peso_unitario_kg, 0)
             FROM Acessorio a
             LEFT JOIN Tipo_acessorio t ON a.ID_tipo_acessorio = t.ID_tipo_acessorio
             ORDER BY a.dataCadastro DESC, a.ID_acessorio DESC

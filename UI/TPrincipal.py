@@ -4,7 +4,6 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),'..')))
 
 import customtkinter as ctk
-from TFormulas import TelaCriarFormula
 from TOperacao import TelaOperacao
 from TFrota import TelaFrota
 from TAcessorios import TelaAcessorios
@@ -26,7 +25,7 @@ class App(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
-        self.frame_menu = ctk.CTkFrame(self, width=220, corner_radius=0)
+        self.frame_menu = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#1a1a1a")
         self.frame_menu.grid(row=0, column=0, sticky="nsew")
         self.frame_menu.grid_rowconfigure(6, weight=1)
 
@@ -38,9 +37,6 @@ class App(ctk.CTk):
 
         self.btn_plano = ctk.CTkButton(self.frame_menu, text="Plano de Rigging", width=LARGURA_BTN, height=ALTURA_BTN, command=self.abrir_tela_plano)
         self.btn_plano.grid(row=2, column=0, padx=20, pady=10)
-
-        self.btn_formulas = ctk.CTkButton(self.frame_menu, text="Fórmulas Customizadas", width=LARGURA_BTN, height=ALTURA_BTN, command=self.abrir_tela_formulas)
-        self.btn_formulas.grid(row=3, column=0, padx=20, pady=10)
 
         self.btn_frota = ctk.CTkButton(self.frame_menu, text="Gestão de Frota", width=LARGURA_BTN, height=ALTURA_BTN, command=self.abrir_tela_frota)
         self.btn_frota.grid(row=4, column=0, padx=20, pady=10)
@@ -62,7 +58,6 @@ class App(ctk.CTk):
 
     def abrir_tela_operacao(self): self.mostrar_tela(TelaOperacao)
     def abrir_tela_plano(self):    self.mostrar_tela(TelaPlano)
-    def abrir_tela_formulas(self): self.mostrar_tela(TelaCriarFormula)
     def abrir_tela_frota(self):    self.mostrar_tela(TelaFrota)
     def abrir_tela_acessorios(self): self.mostrar_tela(TelaAcessorios)
 

@@ -3,13 +3,13 @@ import math
 class CalculadorRigging:
     
     @staticmethod
-    def calcular_carga_bruta(peso_liquido: float, peso_lingada: float, peso_balancim: float = 0.0) -> float:
-        if peso_liquido <= 0:
+    def calcular_carga_bruta(peso_liquido_kg: float, peso_lingada_kg: float, peso_balancim_kg: float = 0.0) -> float:
+        if peso_liquido_kg <= 0:
             raise ValueError("O peso líquido da carga deve ser maior que zero.")
-        return round(peso_liquido + peso_lingada + peso_balancim, 5)
+        return round(peso_liquido_kg + peso_lingada_kg + peso_balancim_kg, 2)
 
     @staticmethod
-    def calcular_tensao_cinta(peso_aplicado: float, angulo_graus: float, quantidade_pernas: int = 2) -> float:
+    def calcular_tensao_cinta(peso_aplicado_kg: float, angulo_graus: float, quantidade_pernas: int = 2) -> float:
         if quantidade_pernas <= 0:
             raise ValueError("A quantidade de pernas deve ser maior que zero.")
             
@@ -19,44 +19,58 @@ class CalculadorRigging:
         if cos_angulo <= 0:
             raise ValueError("Ângulo de inclinação inválido.")
             
-        tensao = (1 / cos_angulo) * (peso_aplicado / quantidade_pernas)
-        return round(tensao, 3)
+        tensao_kg = (1 / cos_angulo) * (peso_aplicado_kg / quantidade_pernas)
+        return round(tensao_kg, 2)
 
     @staticmethod
-    def calcular_taxa_utilizacao(carga_atuante: float, capacidade_nominal: float) -> dict:
-        if capacidade_nominal <= 0:
+    def calcular_taxa_utilizacao(carga_atuante_kg: float, capacidade_nominal_kg: float) -> dict:
+        if capacidade_nominal_kg <= 0:
             raise ValueError("A capacidade nominal deve ser maior que zero.")
             
-        tu_percentual = (carga_atuante / capacidade_nominal) * 100
+        tu_percentual = (carga_atuante_kg / capacidade_nominal_kg) * 100
+        
+        # ==========================================
+        # TRAVA DE CARGA MÁXIMA (HARD STOP)
+        # ==========================================
+        if tu_percentual > 100.0:
+            raise ValueError(
+                f"TRAVA DE SEGURANÇA ACIONADA! Operação bloqueada. "
+                f"Carga atuante ({carga_atuante_kg:.2f} kg) excede o limite máximo do equipamento ({capacidade_nominal_kg:.2f} kg)."
+            )
+            
         aprovado = tu_percentual <= 85.0
         
         return {
             "tu_percentual": round(tu_percentual, 2),
             "aprovado": aprovado,
-            "status": "APROVADO" if aprovado else "REPROVADO (Acima do limite de 85%)"
+            "status": "APROVADO" if aprovado else "REPROVADO (Acima do limite ideal de 85%)"
         }
 
     @staticmethod
-    def calcular_esforco_sapatas(peso_carga_kgf: float, raio_operacao_m: float, 
+    def calcular_esforco_sapatas(peso_carga_kg: float, raio_operacao_m: float, 
                                  dist_eixo_sapata_m: float, abertura_sapatas_m: float, 
-                                 peso_guindaste_caminhao_kgf: float) -> float:
-        momento = peso_carga_kgf * raio_operacao_m
+                                 peso_guindaste_caminhao_kg: float) -> float:
+        momento = peso_carga_kg * raio_operacao_m
         forca_adicional = momento / (dist_eixo_sapata_m + abertura_sapatas_m)
-        esforco_sapata = (peso_guindaste_caminhao_kgf / 2) + forca_adicional
+        esforco_sapata = (peso_guindaste_caminhao_kg / 2) + forca_adicional
         return round(esforco_sapata, 2)
 
     @staticmethod
-    def calcular_rmet(esforco_sapata_kgf: float, largura_dormente_cm: float, 
+    def calcular_rmet(esforco_sapata_kg: float, largura_dormente_cm: float, 
                       comprimento_dormente_cm: float, qtd_dormentes: int = 1) -> float:
         area_patolamento_cm2 = largura_dormente_cm * comprimento_dormente_cm * qtd_dormentes
         if area_patolamento_cm2 <= 0:
             raise ValueError("A área de patolamento deve ser maior que zero.")
             
-        rmet = esforco_sapata_kgf / area_patolamento_cm2
+        rmet = esforco_sapata_kg / area_patolamento_cm2
         return round(rmet, 2)
 
     @staticmethod
     def interpolar_capacidade(tabela_carga: dict, comprimento_lanca: float, raio_operacao: float) -> float:
+        """
+        Retorna a capacidade interpolada em KG. 
+        Presume-se que a tabela_carga fornecida pelo banco agora armazene valores em KG.
+        """
         chave_lanca = str(float(comprimento_lanca))
         
         if chave_lanca not in tabela_carga:
@@ -78,7 +92,7 @@ class CalculadorRigging:
         for r in raios_disponiveis:
             if math.isclose(raio_operacao, r, abs_tol=1e-4):
                 chave_r = str(r) if str(r) in curva_raios else str(int(r))
-                return round(float(curva_raios[chave_r]), 3) 
+                return round(float(curva_raios[chave_r]), 2) 
 
         for i in range(len(raios_disponiveis) - 1):
             r1 = raios_disponiveis[i]
@@ -92,9 +106,10 @@ class CalculadorRigging:
                 c2 = float(curva_raios[chave_r2])
                 
                 capacidade_interpolada = c1 + ((raio_operacao - r1) / (r2 - r1)) * (c2 - c1)
-                return round(capacidade_interpolada, 3) 
+                return round(capacidade_interpolada, 2) 
 
         raise ValueError("Erro inesperado ao processar a interpolação da tabela de carga.")
+
 
 class MotorFormulasCustomizadas:
     @staticmethod
@@ -125,47 +140,39 @@ class MotorFormulasCustomizadas:
 
 FORMULAS_FIXAS = [
     {
-        "nome": "Carga Bruta",
-        "descricao": "Soma o peso líquido da carga com os acessórios (lingada e balancim).",
-        "variaveis": "peso_liquido, peso_lingada, peso_balancim",
-        "expressao": "peso_liquido + peso_lingada + peso_balancim",
+        "nome": "Carga Bruta (kg)",
+        "descricao": "Soma o peso líquido da carga com os acessórios (lingada e balancim) em kg.",
+        "variaveis": "peso_liquido_kg, peso_lingada_kg, peso_balancim_kg",
+        "expressao": "peso_liquido_kg + peso_lingada_kg + peso_balancim_kg",
     },
     {
-        "nome": "Tensão na Cinta",
-        "descricao": "Tensão em cada perna da cinta, considerando a inclinação em relação à vertical.",
-        "variaveis": "peso_aplicado, angulo_graus, quantidade_pernas",
-        "expressao": "(1 / cos(radians(angulo_graus))) * (peso_aplicado / quantidade_pernas)",
+        "nome": "Tensão na Cinta (kg)",
+        "descricao": "Tensão em cada perna da cinta em kg, considerando a inclinação em relação à vertical.",
+        "variaveis": "peso_aplicado_kg, angulo_graus, quantidade_pernas",
+        "expressao": "(1 / cos(radians(angulo_graus))) * (peso_aplicado_kg / quantidade_pernas)",
     },
     {
         "nome": "Taxa de Utilização (TU)",
-        "descricao": "Percentual da capacidade nominal em uso. Limite de segurança: 85%.",
-        "variaveis": "carga_atuante, capacidade_nominal",
-        "expressao": "(carga_atuante / capacidade_nominal) * 100",
+        "descricao": "Percentual da capacidade nominal em uso. Limite de segurança: 85%. Trava máxima: 100%.",
+        "variaveis": "carga_atuante_kg, capacidade_nominal_kg",
+        "expressao": "(carga_atuante_kg / capacidade_nominal_kg) * 100",
     },
     {
         "nome": "Esforço nas Sapatas (kgf)",
         "descricao": "Esforço máximo em uma das sapatas do guindaste.",
-        "variaveis": "peso_guindaste_caminhao_kgf, peso_carga_kgf, raio_operacao_m, dist_eixo_sapata_m, abertura_sapatas_m",
-        "expressao": "(peso_guindaste_caminhao_kgf / 2) + (peso_carga_kgf * raio_operacao_m) / (dist_eixo_sapata_m + abertura_sapatas_m)",
+        "variaveis": "peso_guindaste_caminhao_kg, peso_carga_kg, raio_operacao_m, dist_eixo_sapata_m, abertura_sapatas_m",
+        "expressao": "(peso_guindaste_caminhao_kg / 2) + (peso_carga_kg * raio_operacao_m) / (dist_eixo_sapata_m + abertura_sapatas_m)",
     },
     {
         "nome": "RMET (kgf/cm²)",
         "descricao": "Resistência Mínima Exigida do Terreno, pela área de patolamento.",
-        "variaveis": "esforco_sapata_kgf, largura_dormente_cm, comprimento_dormente_cm, qtd_dormentes",
-        "expressao": "esforco_sapata_kgf / (largura_dormente_cm * comprimento_dormente_cm * qtd_dormentes)",
+        "variaveis": "esforco_sapata_kg, largura_dormente_cm, comprimento_dormente_cm, qtd_dormentes",
+        "expressao": "esforco_sapata_kg / (largura_dormente_cm * comprimento_dormente_cm * qtd_dormentes)",
     },
     {
-        "nome": "Interpolação Linear de Capacidade",
-        "descricao": "Capacidade para um raio entre dois pontos (r1, c1) e (r2, c2) da tabela de carga.",
+        "nome": "Interpolação Linear de Capacidade (kg)",
+        "descricao": "Capacidade para um raio entre dois pontos (r1, c1) e (r2, c2) da tabela de carga em kg.",
         "variaveis": "raio_operacao, r1, r2, c1, c2",
         "expressao": "c1 + ((raio_operacao - r1) / (r2 - r1)) * (c2 - c1)",
     },
 ]
-
-if __name__ == "__main__":
-    motor = MotorFormulasCustomizadas()
-    formula_teste = "max(forca_base, (vento ** 2) * area * cos(radians(angulo)))"
-    valores = {"forca_base": 500.0, "vento": 35.5, "area": 12.0, "angulo": 45}
-    resultado = motor.avaliar_expressao(formula_teste, valores)
-    print(f"Fórmula: {formula_teste}")
-    print(f"Resultado final calculado: {resultado:.2f}")

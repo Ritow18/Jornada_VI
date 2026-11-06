@@ -5,8 +5,7 @@ mesmo arquivo ao mesmo tempo. Não importa nada de rep.py (evita import circular
 """
 from datetime import datetime
 
-# Colunas novas nas tabelas que já existem. A migração é idempotente:
-# só adiciona o que falta, então funciona em banco novo e em banco antigo.
+# Colunas ajustadas para refletir apenas KG
 COLUNAS_NOVAS = {
     "Acessorio": [
         ("peso_unitario_kg", "REAL DEFAULT 0"),
@@ -14,8 +13,8 @@ COLUNAS_NOVAS = {
     "PlanoRigging": [
         ("local", "TEXT"),
         ("lanca_m", "REAL"),
-        ("carga_bruta_ton", "REAL"),
-        ("capacidade_ton", "REAL"),
+        ("carga_bruta_kg", "REAL"), 
+        ("capacidade_kg", "REAL"),
         ("tu_guindaste", "REAL"),
         ("esforco_sapata_kgf", "REAL"),
         ("rmet_kgf_cm2", "REAL"),
@@ -31,7 +30,7 @@ COLUNAS_NOVAS = {
         ("angulo_graus", "REAL"),
         ("pernas", "INTEGER"),
         ("carga_aplicada_kg", "REAL"),
-        ("esforco_ton", "REAL"),
+        ("esforco_kg", "REAL"), 
         ("tu_percentual", "REAL"),
     ],
 }
@@ -56,13 +55,13 @@ class RepPlano:
         """Acessórios com tudo que o cálculo precisa."""
         self.cursor.execute('''
             SELECT a.ID_acessorio, t.nome_tipo, a.codIdentificacao,
-                   a.capac_carga_ton, a.desgaste_perc, COALESCE(a.peso_unitario_kg, 0)
+                   a.capac_carga_kg, a.desgaste_perc, COALESCE(a.peso_unitario_kg, 0)
             FROM Acessorio a
             LEFT JOIN Tipo_acessorio t ON a.ID_tipo_acessorio = t.ID_tipo_acessorio
             ORDER BY t.nome_tipo, a.codIdentificacao
         ''')
         return [
-            {"id": r[0], "tipo": r[1] or "", "codigo": r[2], "capac_ton": r[3],
+            {"id": r[0], "tipo": r[1] or "", "codigo": r[2], "capac_kg": r[3],
              "desgaste_perc": r[4], "peso_unit_kg": r[5]}
             for r in self.cursor.fetchall()
         ]
@@ -85,14 +84,14 @@ class RepPlano:
             self.cursor.execute(
                 f'''INSERT INTO PlanoRigging
                     (ID_guindaste, numeroPlano, cliente, dataOperacao, raioOperacao,
-                     velocidadeVento, statusAprovacao, local, lanca_m, carga_bruta_ton,
-                     capacidade_ton, tu_guindaste, esforco_sapata_kgf, rmet_kgf_cm2,
+                     velocidadeVento, statusAprovacao, local, lanca_m, carga_bruta_kg,
+                     capacidade_kg, tu_guindaste, esforco_sapata_kgf, rmet_kgf_cm2,
                      peso_guindaste_caminhao_kgf, dist_eixo_sapata_m, abertura_sapatas_m,
                      dormente_larg_cm, dormente_comp_cm, dormente_qtd, resistencia_terreno)
                     VALUES ({",".join(["?"] * 21)})''',
                 (cab["id_guindaste"], numero, cab["cliente"], cab["data_iso"], cab["raio_m"],
                  cab.get("vento"), 1 if res["aprovado"] else 0, cab.get("local"), cab["lanca_m"],
-                 res["carga_bruta_ton"], res["capacidade_ton"], res["tu_guindaste"]["tu_percentual"],
+                 res["carga_bruta_kg"], res["capacidade_kg"], res["tu_guindaste"]["tu_percentual"],
                  sap.get("esforco_kgf"), sap.get("rmet"),
                  s.get("peso_guindaste_kgf"), s.get("dist_eixo_m"), s.get("abertura_m"),
                  s.get("dormente_larg_cm"), s.get("dormente_comp_cm"), s.get("dormente_qtd"),
@@ -100,19 +99,19 @@ class RepPlano:
             id_plano = self.cursor.lastrowid
 
             self.cursor.execute(
-                '''INSERT INTO Carga (ID_plano, descricao, pesoLiquido_ton, comprimento_m, largura_m, altura_m)
+                '''INSERT INTO Carga (ID_plano, descricao, pesoLiquido_kg, comprimento_m, largura_m, altura_m)
                    VALUES (?, ?, ?, ?, ?, ?)''',
-                (id_plano, carga["descricao"], carga["peso_kg"] / 1000,
+                (id_plano, carga["descricao"], carga["peso_liquido_kg"], # Sem dividir por 1000
                  carga.get("comp_m"), carga.get("larg_m"), carga.get("alt_m")))
 
             for l in res["linhas"]:
                 self.cursor.execute(
                     '''INSERT INTO Rel_Plano_Acessorio
                        (ID_plano, ID_acessorio, quantidade_usada, angulo_graus, pernas,
-                        carga_aplicada_kg, esforco_ton, tu_percentual)
+                        carga_aplicada_kg, esforco_kg, tu_percentual)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                     (id_plano, l["id"], l["qtd"], l.get("angulo"), l.get("pernas"),
-                     l["carga_aplicada_ton"] * 1000, l["esforco_ton"], l["tu_percentual"]))
+                     l["carga_aplicada_kg"], l["esforco_kg"], l["tu_percentual"])) # Sem multiplicar por 1000
 
             self.conexao.commit()
             return numero
