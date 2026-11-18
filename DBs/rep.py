@@ -11,9 +11,21 @@ if str(raiz_codigo) not in sys.path:
 from DBs.rep_plano import migrar_schema_plano
 
 class BancoDeDados:
-    def __init__(self, nome_arquivo="banco_rigging.sqlite"):
-        dir_atual = os.path.dirname(os.path.abspath(__file__))
-        caminho_banco = os.path.join(dir_atual, nome_arquivo)
+    def __init__(self, nome_arquivo="banco_rigging.sqlite"):        
+
+        if getattr(sys, 'frozen', False):
+            # Quando for .exe, esconde o banco na pasta AppData do Windows
+            appdata = os.environ.get('LOCALAPPDATA')
+            pasta_base = os.path.join(appdata, "RigMaster")
+            
+            # Cria a pasta secreta "RigMaster" se ela ainda não existir
+            os.makedirs(pasta_base, exist_ok=True)
+        else:
+            # Quando estiver no VS Code, mantém na raiz do projeto
+            pasta_base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+        
+        caminho_banco = os.path.join(pasta_base, "banco_rigging.sqlite")
         self.conexao = sqlite3.connect(caminho_banco)
         self.cursor = self.conexao.cursor()
         self.cursor.execute("PRAGMA foreign_keys = ON;")
@@ -34,7 +46,6 @@ class BancoDeDados:
             )
             self.conexao.commit()
 
-        # ALTERADO: capac_max_base_ton -> capac_max_base_kg
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Guindaste (
                 ID_guindaste INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +57,6 @@ class BancoDeDados:
             )
         ''')
 
-        # ALTERADO: capac_carga_ton -> capac_carga_kg
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Acessorio (
                 ID_acessorio INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,7 +108,6 @@ class BancoDeDados:
             )
         ''')
 
-        # ALTERADO: pesoLiquido_ton -> pesoLiquido_kg
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS Carga (
                 ID_carga INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,18 +132,42 @@ class BancoDeDados:
             )
         ''')
         
+        # NOVO: Tabela para armazenar os moldes/templates das cargas
         self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS FormulaCustomizada (
-                ID_formula INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome_calculo TEXT NOT NULL,
-                descricao TEXT,
-                variaveis_esperadas TEXT NOT NULL, 
-                expressao_matematica TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS Template_TabelaCarga (
+                ID_template INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome_template TEXT NOT NULL UNIQUE,
+                tabelaCarga_JSON TEXT NOT NULL,
+                dataCriacao TEXT
             )
         ''')
 
         migrar_schema_plano(self.conexao)
         self.conexao.commit()
+
+class RepTemplateCarga:
+    def __init__(self, banco):
+        self.conexao = banco.conexao
+        self.cursor = banco.cursor
+
+    def salvar_template(self, nome: str, tabela_carga: dict) -> int:
+        tabela_json = json.dumps(tabela_carga)
+        sql = '''INSERT INTO Template_TabelaCarga (nome_template, tabelaCarga_JSON, dataCriacao)
+                 VALUES (?, ?, datetime('now', 'localtime'))'''
+        self.cursor.execute(sql, (nome, tabela_json))
+        self.conexao.commit()
+        return self.cursor.lastrowid
+
+    def listar_todos(self) -> list:
+        sql = "SELECT ID_template, nome_template, dataCriacao, tabelaCarga_JSON FROM Template_TabelaCarga ORDER BY ID_template DESC"
+        self.cursor.execute(sql)
+        return self.cursor.fetchall()
+
+    def deletar_template(self, id_template: int) -> bool:
+        sql = "DELETE FROM Template_TabelaCarga WHERE ID_template = ?"
+        self.cursor.execute(sql, (id_template,))
+        self.conexao.commit()
+        return self.cursor.rowcount > 0
 
 class RepFormula:
     def __init__(self, banco):
@@ -204,7 +237,17 @@ class RepGuindaste:
         }
 
     def listar_todos(self) -> list:
-        sql = "SELECT ID_guindaste, modelo, fabricante, capac_max_base_kg, dataCadastro FROM Guindaste"
+        sql = """
+            SELECT 
+                ID_guindaste, 
+                modelo, 
+                fabricante, 
+                capac_max_base_kg,
+                tabelaCarga_JSON,
+                dataCadastro
+                FROM Guindaste
+                ORDER BY ID_guindaste DESC
+            """
         self.cursor.execute(sql)
         return self.cursor.fetchall()
 
@@ -212,6 +255,33 @@ class RepAcessorio:
     def __init__(self, banco):
         self.conexao = banco.conexao
         self.cursor = banco.cursor
+
+    def gerar_codigo_automatico(self, nome_tipo: str) -> str:
+        """Gera o próximo código sequencial baseado no tipo do acessório."""
+        prefixos = {
+            "Cinta Tubular": "CIN",
+            "Manilha": "MAN",
+            "Balancim": "BAL",
+            "Manilha Curva": "MAC"
+        }
+        prefixo = prefixos.get(nome_tipo, nome_tipo[:3].upper())
+        
+        self.cursor.execute(
+            "SELECT codIdentificacao FROM Acessorio WHERE codIdentificacao LIKE ? ORDER BY codIdentificacao DESC LIMIT 1", 
+            (f"{prefixo}-%",)
+        )
+        resultado = self.cursor.fetchone()
+        
+        if resultado and resultado[0]:
+            try:
+                ultimo_num = int(resultado[0].split('-')[-1])
+                proximo_num = ultimo_num + 1
+            except ValueError:
+                proximo_num = 1
+        else:
+            proximo_num = 1
+            
+        return f"{prefixo}-{proximo_num:04d}"
 
     def salvar_acessorio(self, tipo_id: int, cod: str, capac_kg: float, desgaste: float, peso_kg: float = 0.0) -> int:
         sql = '''

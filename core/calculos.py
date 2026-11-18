@@ -32,11 +32,11 @@ class CalculadorRigging:
         # ==========================================
         # TRAVA DE CARGA MÁXIMA (HARD STOP)
         # ==========================================
-        if tu_percentual > 100.0:
-            raise ValueError(
-                f"TRAVA DE SEGURANÇA ACIONADA! Operação bloqueada. "
-                f"Carga atuante ({carga_atuante_kg:.2f} kg) excede o limite máximo do equipamento ({capacidade_nominal_kg:.2f} kg)."
-            )
+        # if tu_percentual > 100.0:
+        #     raise ValueError(
+        #         f"TRAVA DE SEGURANÇA ACIONADA! Operação bloqueada. "
+        #         f"Carga atuante ({carga_atuante_kg:.2f} kg) excede o limite máximo do equipamento ({capacidade_nominal_kg:.2f} kg)."
+        #     )
             
         aprovado = tu_percentual <= 85.0
         

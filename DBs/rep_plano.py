@@ -1,11 +1,5 @@
-"""Persistência do Plano de Rigging.
-
-Arquivo separado de rep.py de propósito: assim ninguém precisa mexer no
-mesmo arquivo ao mesmo tempo. Não importa nada de rep.py (evita import circular).
-"""
 from datetime import datetime
 
-# Colunas ajustadas para refletir apenas KG
 COLUNAS_NOVAS = {
     "Acessorio": [
         ("peso_unitario_kg", "REAL DEFAULT 0"),
@@ -25,6 +19,8 @@ COLUNAS_NOVAS = {
         ("dormente_comp_cm", "REAL"),
         ("dormente_qtd", "INTEGER"),
         ("resistencia_terreno", "REAL"),
+        ("crea", "TEXT"),
+        ("art", "TEXT"),
     ],
     "Rel_Plano_Acessorio": [
         ("angulo_graus", "REAL"),
@@ -87,15 +83,17 @@ class RepPlano:
                      velocidadeVento, statusAprovacao, local, lanca_m, carga_bruta_kg,
                      capacidade_kg, tu_guindaste, esforco_sapata_kgf, rmet_kgf_cm2,
                      peso_guindaste_caminhao_kgf, dist_eixo_sapata_m, abertura_sapatas_m,
-                     dormente_larg_cm, dormente_comp_cm, dormente_qtd, resistencia_terreno)
-                    VALUES ({",".join(["?"] * 21)})''',
+                     dormente_larg_cm, dormente_comp_cm, dormente_qtd, resistencia_terreno,
+                     crea, art) 
+                    VALUES ({",".join(["?"] * 23)})''', # Passam a ser 23 campos
                 (cab["id_guindaste"], numero, cab["cliente"], cab["data_iso"], cab["raio_m"],
                  cab.get("vento"), 1 if res["aprovado"] else 0, cab.get("local"), cab["lanca_m"],
                  res["carga_bruta_kg"], res["capacidade_kg"], res["tu_guindaste"]["tu_percentual"],
                  sap.get("esforco_kgf"), sap.get("rmet"),
                  s.get("peso_guindaste_kgf"), s.get("dist_eixo_m"), s.get("abertura_m"),
                  s.get("dormente_larg_cm"), s.get("dormente_comp_cm"), s.get("dormente_qtd"),
-                 s.get("resistencia_terreno")))
+                 s.get("resistencia_terreno"), 
+                 cab.get("crea"), cab.get("art"))) 
             id_plano = self.cursor.lastrowid
 
             self.cursor.execute(
@@ -115,6 +113,21 @@ class RepPlano:
 
             self.conexao.commit()
             return numero
+
         except Exception:
             self.conexao.rollback()
             raise
+
+def proximo_numero_art(self) -> str:
+    """Gera sequência interna para controle (ex: ART-2026-001)"""
+    ano_atual = datetime.now().strftime("%Y")
+    prefixo = f"ART-{ano_atual}-"
+    self.cursor.execute(
+        "SELECT MAX(art) FROM PlanoRigging WHERE art LIKE ?", (prefixo + "%",))
+    ultimo = self.cursor.fetchone()[0]
+    
+    if ultimo and '-' in ultimo:
+        seq = int(ultimo.split('-')[-1]) + 1
+    else:
+        seq = 1
+    return f"{prefixo}{seq:03d}"

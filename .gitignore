@@ -8,6 +8,7 @@ build/
 dist/
 *.spec
 *.egg-info/
+*.spec
 
 # === VIRTUAL ENVIRONMENTS ===
 .venv/
